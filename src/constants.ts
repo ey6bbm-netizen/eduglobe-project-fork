@@ -7,8 +7,8 @@ export const LANGUAGES = [
   Language.TELUGU,
 ];
 
-export const FREE_MESSAGE_LIMIT = 10;
-export const GUEST_CHAT_LIMIT = 5;
+export const FREE_MESSAGE_LIMIT = 1000;
+export const GUEST_CHAT_LIMIT = 500;
 
 export const UI_TEXT: { [key in Language]: { [key: string]: string } } = {
   [Language.ENGLISH]: {
