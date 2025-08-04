@@ -116,7 +116,14 @@ const App = () => {
     text,
     language,
   };
-
+  // Optimistic update (push out)
+  setConversations(prevConvos =>
+    prevConvos.map(c =>
+      c.id === activeConversationId
+        ? { ...c, messages: [...c.messages, userMessage] }
+        : c
+    )
+  );
   try {
     const currentConvo = conversations.find(c => c.id === activeConversationId)!;
     const shouldGenerateName = currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
