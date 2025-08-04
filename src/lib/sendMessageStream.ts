@@ -20,32 +20,26 @@ export async function sendMessageStream(
     if (chunk.text) onToken(chunk.text);    // ← use the callback you passed in
   }
   const reader = res.body!.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  let finalChatName = "";
-
+  const textDecoder = new TextDecoder();
+  let buffer = '';
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const parts = buf.split("\n\n");
-    buf = parts.pop()!;
-
+    buffer += textDecoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop()!;
     for (const part of parts) {
-      if (part.startsWith("event: done")) {
-        // the line after "event: done" is "data: {\"chatName\":\"…\"}"
-        const dataLine = part.split("\n").find(l => l.startsWith("data:"));
-        if (dataLine) {
-          const { chatName } = JSON.parse(dataLine.slice(6));
-          finalChatName = chatName;
-        }
+      if (part.startsWith('data:')) {
+        const chunk = JSON.parse(part.slice(6));
+        if (chunk.text) onToken(chunk.text);
         continue;
       }
-      if (!part.startsWith("data:")) continue;
-      const chunk = JSON.parse(part.slice(6));
-      if (chunk.text) onToken(chunk.text);
+      if (part.startsWith('event: done')) {
+        const dataLine = part.split('\n').find(l => l.startsWith('data:'))!;
+        const { chatName } = JSON.parse(dataLine.slice(6));
+        return chatName;
+      }
     }
   }
-
-  return finalChatName;
+  return '';
 }
