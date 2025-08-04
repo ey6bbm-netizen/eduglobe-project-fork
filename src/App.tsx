@@ -109,6 +109,15 @@ const App = () => {
   const handleSendMessage = useCallback(async (text: string) => {
   // … optimistic user push, loading state, etc …
 
+
+  // Re-declare here so it's in scope for both optimistic update AND streaming call:
+  const userMessage: Message = {
+    id: Date.now().toString(),
+    role: Role.USER,
+    text,
+    language,
+  };
+
   try {
     const currentConvo = conversations.find(c => c.id === activeConversationId)!;
     const shouldGenerateName = currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
