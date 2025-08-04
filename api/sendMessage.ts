@@ -177,7 +177,6 @@ async function sendMessageSSE(payload) {
         continue;
       }
       if (!part.startsWith("data:")) continue;
-      const chunk = JSON.parse(part.slice(6));
       onNewToken(chunk.text);
     }
   }
