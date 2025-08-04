@@ -11,12 +11,16 @@ export async function sendMessageStream(payload: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
+  });f
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API ${res.status}: ${body}`);
   }
-
+  for await (const chunk of llmStream) {
+    // …
+    const chunk = JSON.parse(part.slice(6));
+    if (chunk.text) onToken(chunk.text);    // ← use the callback you passed in
+  }
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buf = "";
