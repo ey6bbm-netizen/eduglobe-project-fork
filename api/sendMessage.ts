@@ -7,7 +7,9 @@ export default async function handler(req, res) {
   try {
     const genAI = new GoogleGenerativeAI(process.env.API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
+    console.log("→ [sendMessage] incoming body:", req.body);
+    console.log("→ [sendMessage] auth header:", req.headers.authorization);
+    return res.status(200).json({ chatResponse, chatName });
     const stream = await model.generateContentStream({
       text: req.body.text,
       history: req.body.history,
@@ -20,6 +22,7 @@ export default async function handler(req, res) {
     res.end();
   } catch (err) {
     console.error("Stream error:", err);
+    console.error("💥 [sendMessage] unhandled error:", err);
     res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
     res.end();
   }
