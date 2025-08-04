@@ -142,58 +142,51 @@ const App = () => {
         : c
     )
   );
+  setIsLoading(true);
+
   try {
     const currentConvo = conversations.find(c => c.id === activeConversationId)!;
-    const shouldGenerateName = currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
+    const shouldGenerateName =
+      currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
 
-    // 1) Add an empty AI message
-    const aiMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: Role.AI,
-      text: "",
-      language,
-    };
+    // ─── INSERT HERE ───
+    // Start streaming and append tokens into the last AI message:
+    const chatName = await sendMessageStream(
+      {
+        text: userMessage.text,
+        history: currentConvo.messages.slice(0, -1),
+        language,
+        generateName: shouldGenerateName,
+      },
+      (token: string) => {
+        setConversations(prev =>
+          prev.map(c => {
+            if (c.id !== activeConversationId) return c;
+            const msgs = [...c.messages];
+            const last = msgs[msgs.length - 1];
+            msgs[msgs.length - 1] = { ...last, text: last.text + token };
+            return { ...c, messages: msgs };
+          })
+        );
+      }
+    );
+    // ─────────────────────
+
+    // After streaming completes, update chat title if provided
     setConversations(prev =>
       prev.map(c =>
-        c.id === activeConversationId
-          ? { ...c, messages: [...c.messages, aiMessage] }
-          : c
+        c.id === activeConversationId ? { ...c, name: chatName || c.name } : c
       )
     );
 
-    // 2) Stream tokens and append to that AI message
-    const chatName = await sendMessageStream(payload, token => {
-      setConversations(prev =>
-        prev.map(c => {
-          if (c.id !== activeConversationId) return c;
-          const msgs = [...c.messages];
-          const last = msgs[msgs.length - 1];
-          msgs[msgs.length - 1] = { ...last, text: last.text + token };
-          return { ...c, messages: msgs };
-        })
-      );
-    });
-
-    // 3) Finally, set the conversation title if one was generated
-    setConversations(prev =>
-      prev.map(c =>
-        c.id === activeConversationId
-          ? { ...c, name: chatName || c.name }
-          : c
-      )
-    );
-
-    if (!authenticatedUser) {
-      setTotalMessageCount(cnt => cnt + 2);
-    }
-    } catch (error) {
-      console.error("Streaming error:", error);
-      // same error fallback as before (push uiStrings.errorMessage) …
+    } catch (err) {
+      console.error("Streaming error:", err);
+      // … error handling …
     } finally {
       setIsLoading(false);
     }
-  }, [activeConversationId, authenticatedUser, isPermanentlyBlocked, totalMessageCount, language, conversations, setConversations, setIsPermanentlyBlocked, setTotalMessageCount, uiStrings]);
-  
+  },[activeConversationId, authenticatedUser, isPermanentlyBlocked, totalMessageCount, language, conversations, setConversations, setIsPermanentlyBlocked, setTotalMessageCount, uiStrings]);
+    
   const handleNewChat = () => {
     if (!authenticatedUser && conversations.length >= GUEST_CHAT_LIMIT) {
         return; // Guest limit reached
