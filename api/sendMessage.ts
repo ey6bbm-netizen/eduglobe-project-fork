@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { SYSTEM_PROMPTS, Language, Role } from "./constants.server.js";
+import { Role } from "./constants.server.js";
+
 export const config = { runtime: "edge" };
 
 // Gemini setup
@@ -77,8 +79,6 @@ export default async function handler(req: Request): Promise<Response> {
 
   const {text, history = [], language, conversationName, generateName} = await req.json();
   
-  import { Role } from "./constants.server.js";
-
   const messages = [
     ...history,
     { role: Role.USER, text, language }
