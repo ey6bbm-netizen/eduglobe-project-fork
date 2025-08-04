@@ -67,6 +67,12 @@ const App = () => {
     }
   }, [isPermanentlyBlocked, activeConversation, language, setConversations, activeConversationId, uiStrings.limitReachedMessage]);
 
+  const res = await fetch("/api/sendMessage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, history, language, generateName }),
+  });
+
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API error ${res.status}: ${body}`);
@@ -105,7 +111,7 @@ const App = () => {
   }
 
   return finalChatName;
-}
+
 
 const handleSendMessage = useCallback(async (text: string) => {
   if (!activeConversationId) return;
