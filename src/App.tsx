@@ -65,116 +65,82 @@ const App = () => {
         }
     }
   }, [isPermanentlyBlocked, activeConversation, language, setConversations, activeConversationId, uiStrings.limitReachedMessage]);
+  
+  const handleSendMessage = useCallback(async (text: string) => {
+    if (!activeConversationId) return;
 
-  async function sendMessageStream({ text, history, language, generateName }) {
-  const res = await fetch("/api/sendMessage", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, history, language, generateName }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`API error ${res.status}: ${body}`);
-  }
-
-  const reader = res.body!.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  // This will accumulate tokens as they arrive
-  let finalChatName: string | undefined;
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop()!; // leftover
-
-    for (const part of parts) {
-      // Final “done” event carries the chatName
-      if (part.startsWith("event: done")) {
-        const dataLine = part.split("\n").find(l => l.startsWith("data:"));
-        if (dataLine) {
-          const { chatName } = JSON.parse(dataLine.slice(6));
-          finalChatName = chatName;
-        }
-      }
+    const isGuestAndBlocked = !authenticatedUser && isPermanentlyBlocked;
+    if (isGuestAndBlocked) return;
+    
+    if (!authenticatedUser && totalMessageCount >= FREE_MESSAGE_LIMIT) {
+        setIsPermanentlyBlocked(true);
+        return;
     }
-  }
-
-  return finalChatName;
-}
-
-const handleSendMessage = useCallback(async (text: string) => {
-  if (!activeConversationId) return;
-
-  // Create & push the user message once
-  const userMessage: Message = { id: Date.now().toString(), role: Role.USER, text, language };
-  setConversations(prev =>
-    prev.map(c =>
-      c.id === activeConversationId
-        ? { ...c, messages: [...c.messages, userMessage] }
-        : c
-    )
-  );
-
-  setIsLoading(true);
-
-  try {
-    const currentConvo = conversations.find(c => c.id === activeConversationId)!;
-    const shouldGenerateName = currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
-
-    // Create & push the empty AI placeholder here
-    const aiMessage: Message = { id: (Date.now() + 1).toString(), role: Role.AI, text: '', language };
-    setConversations(prev =>
-      prev.map(c =>
-        c.id === activeConversationId
-          ? { ...c, messages: [...c.messages, aiMessage] }
-          : c
-      )
+    
+    const userMessage: Message = { id: Date.now().toString(), role: Role.USER, text, language };
+    
+    // Optimistically update the UI with the user's message
+    const updatedConversations = conversations.map(c => 
+      c.id === activeConversationId ? { ...c, messages: [...c.messages, userMessage] } : c
     );
+    setConversations(updatedConversations);
+    setIsLoading(true);
 
-    // Build payload for stream
-    const payload = {
-      text: userMessage.text,
-      history: currentConvo.messages.slice(0, -1),
-      language,
-      generateName: shouldGenerateName,
-    };
+    try {
+        const currentConvo = updatedConversations.find(c => c.id === activeConversationId);
+        if (!currentConvo) throw new Error("Active conversation not found.");
 
-    // Stream AI response into the last message
-    const chatName = await sendMessageStream(
-      payload,
-      token => {
-        setConversations(prev =>
-          prev.map(c => {
-            if (c.id !== activeConversationId) return c;
-            const msgs = [...c.messages];
-            const last = msgs[msgs.length - 1];
-            msgs[msgs.length - 1] = { ...last, text: last.text + token };
-            return { ...c, messages: msgs };
-          })
-        );
-      }
-    );
+        const shouldGenerateName = currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
 
-    // Update chat title
-    setConversations(prev =>
-      prev.map(c =>
-        c.id === activeConversationId ? { ...c, name: chatName || c.name } : c
-      )
-    );
-  } 
-  catch (err) {
-    console.error('Streaming error:', err);
-    // error fallback
-  } finally {
-    setIsLoading(false);
-  }
-}, [activeConversationId, conversations, language, authenticatedUser, totalMessageCount, isPermanentlyBlocked, uiStrings, setConversations, setTotalMessageCount, setIsPermanentlyBlocked]);  
+        const response = await fetch('/api/sendMessage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ /*…*/ })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'API request failed');
+        }
+
+        const { chatResponse, chatName } = await response.json();
+        const aiMessage: Message = { id: (Date.now() + 1).toString(), role: Role.AI, text: chatResponse, language };
+        
+        // Final update with AI response and possibly a new name
+        setConversations(prevConvos => prevConvos.map(c => {
+            if (c.id === activeConversationId) {
+                // Find the optimistic user message and replace the whole message array
+                const optimisticMessages = c.messages.filter(m => m.id !== userMessage.id);
+                return { 
+                    ...c, 
+                    name: chatName || c.name, 
+                    messages: [...optimisticMessages, userMessage, aiMessage]
+                };
+            }
+            return c;
+        }));
+        
+        if (!authenticatedUser) {
+            setTotalMessageCount(prevCount => prevCount + 2);
+        }
+
+    } catch (error) {
+      console.error("Failed to get response:", error);
+      const errorMessage: Message = { id: (Date.now() + 1).toString(), role: Role.AI, text: uiStrings.errorMessage, language };
+      setConversations(prevConvos => prevConvos.map(c => {
+          if (c.id === activeConversationId) {
+            return { ...c, messages: [...c.messages, errorMessage] };
+          }
+          return c;
+      }));
+       if (!authenticatedUser) {
+            setTotalMessageCount(prevCount => prevCount + 2);
+        }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeConversationId, authenticatedUser, isPermanentlyBlocked, totalMessageCount, language, conversations, setConversations, setIsPermanentlyBlocked, setTotalMessageCount, uiStrings]);
+  
   const handleNewChat = () => {
     if (!authenticatedUser && conversations.length >= GUEST_CHAT_LIMIT) {
         return; // Guest limit reached
