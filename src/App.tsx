@@ -12,6 +12,7 @@ import FloatingSymbols from './components/FloatingSymbols';
 import ChatInput from './components/ChatInput';
 import ChatMessage from './components/ChatMessage';
 import ConversationList from './components/ConversationList';
+import { sendMessageStream } from './lib/sendMessageStream';
 
 const App = () => {
   const [conversations, setConversations] = useLocalStorage<Conversation[]>('conversations', []);
@@ -155,9 +156,10 @@ const handleSendMessage = useCallback(async (text: string) => {
     };
 
     // Stream AI response into the last message
+    // ~Line 36 in App.tsx
     const chatName = await sendMessageStream(
       payload,
-      token => {
+      (token: string) => {
         setConversations(prev =>
           prev.map(c => {
             if (c.id !== activeConversationId) return c;
@@ -169,6 +171,7 @@ const handleSendMessage = useCallback(async (text: string) => {
         );
       }
     );
+
 
     // Update chat title
     setConversations(prev =>
