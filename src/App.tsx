@@ -94,16 +94,8 @@ const App = () => {
 
         const response = await fetch('/api/sendMessage', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...(authenticatedUser && { 'Authorization': 'Bearer FAKE_TOKEN' })
-            },
-            body: JSON.stringify({
-                text: userMessage.text,
-                language: userMessage.language,
-                history: currentConvo.messages.slice(0, -1), // History *before* the new message
-                generateName: shouldGenerateName,
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ /*…*/ })
         });
 
         if (!response.ok) {
