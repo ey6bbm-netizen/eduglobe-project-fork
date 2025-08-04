@@ -66,7 +66,11 @@ const App = () => {
     }
   }, [isPermanentlyBlocked, activeConversation, language, setConversations, activeConversationId, uiStrings.limitReachedMessage]);
 
-  async function sendMessageStream({ text, history, language, generateName }) {
+  async function sendMessageStream(
+    { text, history, language, generateName }: StreamOptions,
+    onToken: (token: string) => void
+  ) {
+
   const res = await fetch("/api/sendMessage", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
