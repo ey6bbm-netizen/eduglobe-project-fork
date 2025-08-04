@@ -88,7 +88,7 @@ const App = () => {
 
   // This will accumulate tokens as they arrive
   let finalChatName: string | undefined;
-
+  
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -99,6 +99,11 @@ const App = () => {
 
     for (const part of parts) {
       // Final “done” event carries the chatName
+      if (part.startsWith("data:")) {
+        const chunk = JSON.parse(part.slice(6));
+        if (chunk.text) onToken(chunk.text);
+        continue;
+      }
       if (part.startsWith("event: done")) {
         const dataLine = part.split("\n").find(l => l.startsWith("data:"));
         if (dataLine) {
