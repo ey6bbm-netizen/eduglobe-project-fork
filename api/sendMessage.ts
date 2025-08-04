@@ -173,7 +173,6 @@ async function sendMessageSSE(payload) {
 
     for (const part of parts) {
       if (part.startsWith("event: done")) {
-        const data = JSON.parse(part.replace(/.*\n/, ""));
         onChatName(data.chatName);
         continue;
       }
