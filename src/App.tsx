@@ -127,6 +127,21 @@ const App = () => {
         : c
     )
   );
+  // After pushing userMessage
+  const aiMessage: Message = {
+    id: (Date.now() + 1).toString(),
+    role: Role.AI,
+    text: "",
+    language,
+  };
+  // Optimistically add the empty AI message
+  setConversations(prevConvos =>
+    prevConvos.map(c =>
+      c.id === activeConversationId
+        ? { ...c, messages: [...c.messages, aiMessage] }
+        : c
+    )
+  );
   try {
     const currentConvo = conversations.find(c => c.id === activeConversationId)!;
     const shouldGenerateName = currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
