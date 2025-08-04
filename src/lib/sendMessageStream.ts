@@ -1,12 +1,10 @@
 // src/lib/sendMessageStream.ts
 import { Language, Role } from "../types";
 
-export async function sendMessageStream(payload: {
-  text: string;
-  history: Message[];
-  language: Language;
-  generateName: boolean;
-}, onToken: (token: string) => void): Promise<string> {
+export async function sendMessageStream(
+  { text, history, language, generateName }: Payload,
+  onToken: (token: string) => void
+): Promise<string> {
   const res = await fetch("/api/sendMessage", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
