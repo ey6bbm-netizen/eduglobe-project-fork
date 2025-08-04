@@ -65,7 +65,51 @@ const App = () => {
         }
     }
   }, [isPermanentlyBlocked, activeConversation, language, setConversations, activeConversationId, uiStrings.limitReachedMessage]);
-  
+
+  async function sendMessageStream({ text, history, language, generateName }) {
+  const res = await fetch("/api/sendMessage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, history, language, generateName }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API error ${res.status}: ${body}`);
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  // This will accumulate tokens as they arrive
+  let finalChatName: string | undefined;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop()!; // leftover
+
+    for (const part of parts) {
+      // Final “done” event carries the chatName
+      if (part.startsWith("event: done")) {
+        const payload = JSON.parse(part.split("\n")[1].slice(6));
+        finalChatName = payload.chatName;
+        continue;
+      }
+      if (!part.startsWith("data:")) continue;
+      const chunk = JSON.parse(part.slice(6));
+      // chunk.text is your next token
+      appendTokenToUI(chunk.text);
+    }
+  }
+
+  return finalChatName;
+}
+
   const handleSendMessage = useCallback(async (text: string) => {
     if (!activeConversationId) return;
 
