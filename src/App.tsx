@@ -186,7 +186,7 @@ const handleSendMessage = useCallback(async (text: string) => {
   } finally {
     setIsLoading(false);
   }
-}, [activeConversationId, conversations, language, authenticatedUser, totalMessageCount, isPermanentlyBlocked, uiStrings, setConversations, setTotalMessageCount, setIsPermanentlyBlocked]);  
+}, [activeConversationId, language, authenticatedUser, totalMessageCount, isPermanentlyBlocked, uiStrings, setConversations, setTotalMessageCount]); 
   const handleNewChat = () => {
     if (!authenticatedUser && conversations.length >= GUEST_CHAT_LIMIT) {
         return; // Guest limit reached
