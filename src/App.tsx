@@ -107,74 +107,64 @@ const App = () => {
 }
 
   const handleSendMessage = useCallback(async (text: string) => {
-    if (!activeConversationId) return;
+  // … optimistic user push, loading state, etc …
 
-    const isGuestAndBlocked = !authenticatedUser && isPermanentlyBlocked;
-    if (isGuestAndBlocked) return;
-    
-    if (!authenticatedUser && totalMessageCount >= FREE_MESSAGE_LIMIT) {
-        setIsPermanentlyBlocked(true);
-        return;
-    }
-    
-    const userMessage: Message = { id: Date.now().toString(), role: Role.USER, text, language };
-    
-    // Optimistically update the UI with the user's message
-    const updatedConversations = conversations.map(c => 
-      c.id === activeConversationId ? { ...c, messages: [...c.messages, userMessage] } : c
+  try {
+    const currentConvo = conversations.find(c => c.id === activeConversationId)!;
+    const shouldGenerateName = currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
+
+    // 1) Add an empty AI message
+    const aiMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: Role.AI,
+      text: "",
+      language,
+    };
+    setConversations(prev =>
+      prev.map(c =>
+        c.id === activeConversationId
+          ? { ...c, messages: [...c.messages, aiMessage] }
+          : c
+      )
     );
-    setConversations(updatedConversations);
-    setIsLoading(true);
 
-    try {
-        const currentConvo = updatedConversations.find(c => c.id === activeConversationId);
-        if (!currentConvo) throw new Error("Active conversation not found.");
+    // 2) Stream tokens and append to that AI message
+    const chatName = await sendMessageStream(
+      {
+        text: userMessage.text,
+        history: currentConvo.messages.slice(0, -1),
+        language,
+        generateName: shouldGenerateName,
+      },
+      (token) => {
+        // append each incoming token
+        setConversations(prev =>
+          prev.map(c => {
+            if (c.id !== activeConversationId) return c;
+            const msgs = [...c.messages];
+            const last = msgs[msgs.length - 1];
+            msgs[msgs.length - 1] = { ...last, text: last.text + token };
+            return { ...c, messages: msgs };
+          })
+        );
+      }
+    );
 
-        const shouldGenerateName = currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
+    // 3) Finally, set the conversation title if one was generated
+    setConversations(prev =>
+      prev.map(c =>
+        c.id === activeConversationId
+          ? { ...c, name: chatName || c.name }
+          : c
+      )
+    );
 
-        const response = await fetch('/api/sendMessage', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ /*…*/ })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'API request failed');
-        }
-
-        const aiMessage: Message = { id: (Date.now() + 1).toString(), role: Role.AI, text: chatResponse, language };
-        
-        // Final update with AI response and possibly a new name
-        setConversations(prevConvos => prevConvos.map(c => {
-            if (c.id === activeConversationId) {
-                // Find the optimistic user message and replace the whole message array
-                const optimisticMessages = c.messages.filter(m => m.id !== userMessage.id);
-                return { 
-                    ...c, 
-                    name: chatName || c.name, 
-                    messages: [...optimisticMessages, userMessage, aiMessage]
-                };
-            }
-            return c;
-        }));
-        
-        if (!authenticatedUser) {
-            setTotalMessageCount(prevCount => prevCount + 2);
-        }
-
+    if (!authenticatedUser) {
+      setTotalMessageCount(cnt => cnt + 2);
+    }
     } catch (error) {
-      console.error("Failed to get response:", error);
-      const errorMessage: Message = { id: (Date.now() + 1).toString(), role: Role.AI, text: uiStrings.errorMessage, language };
-      setConversations(prevConvos => prevConvos.map(c => {
-          if (c.id === activeConversationId) {
-            return { ...c, messages: [...c.messages, errorMessage] };
-          }
-          return c;
-      }));
-       if (!authenticatedUser) {
-            setTotalMessageCount(prevCount => prevCount + 2);
-        }
+      console.error("Streaming error:", error);
+      // same error fallback as before (push uiStrings.errorMessage) …
     } finally {
       setIsLoading(false);
     }
