@@ -143,7 +143,6 @@ const App = () => {
             throw new Error(errorData.error || 'API request failed');
         }
 
-        const { chatResponse, chatName } = await response.json();
         const aiMessage: Message = { id: (Date.now() + 1).toString(), role: Role.AI, text: chatResponse, language };
         
         // Final update with AI response and possibly a new name
