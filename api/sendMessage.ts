@@ -71,86 +71,105 @@ const generateChatName = async (
 // Route handler
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
-      status: 405,
-    });
+    return new Response("Method Not Allowed", { status: 405 });
   }
 
-  if (!process.env.GEMINI_API_KEY) {
-    return new Response(
-      JSON.stringify({ error: "GEMINI_API_KEY is not configured" }),
-      { status: 500 }
-    );
+  const { messages, language, conversationName, generateName } = await req.json();
+  // 1️⃣ Pre-translate history
+  const translatedHistory = [
+    {
+      role: "system",
+      parts: [{ text: SYSTEM_PROMPTS[language] }],
+    },
+    ...await Promise.all(messages.map(async (m: any) => ({
+      role: m.role === Role.USER ? "user" : "model",
+      parts: [{ 
+        text: m.role === Role.USER 
+          ? await translateText(m.text, Language.ENGLISH) 
+          : m.text 
+      }]
+    })))
+  ];
+
+  // 2️⃣ Optionally generate a chat title up front
+  let chatName = conversationName;
+  if (!conversationName && generateName && messages.filter(m => m.role === Role.USER).length === 1) {
+    chatName = await generateChatName(messages[0].text, language);
   }
 
-  try {
-    const body: {
-      messages: { role: string; text: string; language: string }[];
-      language: string;
-      conversationName?: string;
-    } = await req.json();
+  // 3️⃣ Prepare streaming headers
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        // Kick off the streaming LLM call
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const llmStream = await model.generateContentStream({
+          history: translatedHistory,
+          text: messages[messages.length - 1].text,
+        });
 
-    const { messages, language, conversationName } = body;
-    console.log("📥 Incoming request with messages:", messages);
+        // As each chunk arrives, optionally translate it back
+        for await (const chunk of llmStream) {
+          let text = chunk.text ?? "";
+          // If you want to translate each fragment into the user's language:
+          text = await translateText(text, language);
 
-    const userMessages = messages.filter(
-      (m: { role: string }) => m.role === Role.USER
-    );
-    const lastUserMessage = userMessages[userMessages.length - 1]?.text ?? "";
-    console.log("🧠 Last user message:", lastUserMessage);
+          const payload = { ...chunk, text, chatName: null };
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        }
 
-    const translatedMessages = [
-      {
-        role: "system",
-        parts: [{ text: SYSTEM_PROMPTS[language as keyof typeof SYSTEM_PROMPTS] }],
-      },
-      ...(await Promise.all(
-        messages.map(async (msg: { role: string; text: string }) => {
-          const translatedText = msg.role === Role.USER
-            ? await translateText(msg.text, Language.ENGLISH)
-            : msg.text;
-          return {
-            role: msg.role === Role.USER ? "user" : "model",
-            parts: [{ text: translatedText }],
-          };
-        })
-      )),
-    ];
-
-    console.log("📜 Translated message history:", translatedMessages);
-
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const chat = model.startChat({ history: translatedMessages });
-
-    const result = await chat.sendMessage([{ text: lastUserMessage }]);
-    const englishResponse = await result.response.text();
-    const translatedResponse = await translateText(englishResponse, language);
-
-    const aiMessage = {
-      id: Date.now().toString(),
-      role: Role.AI,
-      text: translatedResponse,
-      language,
-    };
-
-    let title = conversationName;
-    if (!conversationName && userMessages.length === 1) {
-      title = await generateChatName(lastUserMessage, language);
-    }
-
-    console.log("✅ Final AI message:", aiMessage);
-
-    return new Response(
-      JSON.stringify({ message: aiMessage, conversationName: title }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
+        // When done, send a final “done” event that includes the chatName
+        controller.enqueue(encoder.encode(
+          `event: done\ndata: ${JSON.stringify({ chatName })}\n\n`
+        ));
+        controller.close();
+      } catch (err: any) {
+        controller.enqueue(encoder.encode(
+          `data: ${JSON.stringify({ error: err.message })}\n\n`
+        ));
+        controller.close();
       }
-    );
-  } catch (err) {
-    console.error("🔥 Internal server error:", err);
-    return new Response(JSON.stringify({ error: "Internal Server Error" }), {
-      status: 500,
-    });
+    }
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    }
+  });
+}
+
+// Client-side consumption
+
+async function sendMessageSSE(payload) {
+  const res = await fetch("/api/sendMessage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split("\n\n");
+    buf = parts.pop()!;
+
+    for (const part of parts) {
+      if (part.startsWith("event: done")) {
+        const data = JSON.parse(part.replace(/.*\n/, ""));
+        onChatName(data.chatName);
+        continue;
+      }
+      if (!part.startsWith("data:")) continue;
+      const chunk = JSON.parse(part.slice(6));
+      onNewToken(chunk.text);
+    }
   }
 }
