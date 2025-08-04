@@ -96,8 +96,11 @@ const App = () => {
     for (const part of parts) {
       // Final “done” event carries the chatName
       if (part.startsWith("event: done")) {
-        finalChatName = payload.chatName;
-        continue;
+        const dataLine = part.split("\n").find(l => l.startsWith("data:"));
+        if (dataLine) {
+          const { chatName } = JSON.parse(dataLine.slice(6));
+          finalChatName = chatName;
+        }
       }
     }
   }
