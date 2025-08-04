@@ -12,7 +12,7 @@ import FloatingSymbols from './components/FloatingSymbols';
 import ChatInput from './components/ChatInput';
 import ChatMessage from './components/ChatMessage';
 import ConversationList from './components/ConversationList';
-import { sendMessageStream } from './sendMessageStream';
+import { sendMessageStream } from './lib/sendMessageStream';
 
 const App = () => {
   const [conversations, setConversations] = useLocalStorage<Conversation[]>('conversations', []);
