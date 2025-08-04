@@ -8,8 +8,8 @@ export async function sendMessageStream(
   const res = await fetch("/api/sendMessage", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });f
+    body: JSON.stringify({ text, history, language, generateName }),
+  });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API ${res.status}: ${body}`);
