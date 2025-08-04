@@ -1,32 +1,4 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-export default async function handler(req, res) {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.flushHeaders();
-
-  try {
-    const genAI = new GoogleGenerativeAI(process.env.API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    console.log("→ [sendMessage] incoming body:", req.body);
-    console.log("→ [sendMessage] auth header:", req.headers.authorization);
-    return res.status(200).json({ chatResponse, chatName });
-    const stream = await model.generateContentStream({
-      text: req.body.text,
-      history: req.body.history,
-    });
-
-    for await (const chunk of stream) {
-      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-    }
-    res.write("data: [DONE]\n\n");
-    res.end();
-  } catch (err) {
-    console.error("Stream error:", err);
-    console.error("💥 [sendMessage] unhandled error:", err);
-    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-    res.end();
-  }
-}
 import { SYSTEM_PROMPTS, Language, Role } from "./constants.server.js";
 
 // Gemini setup
