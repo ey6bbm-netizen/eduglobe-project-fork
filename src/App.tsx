@@ -162,26 +162,17 @@ const App = () => {
     );
 
     // 2) Stream tokens and append to that AI message
-    const chatName = await sendMessageStream(
-      {
-        text: userMessage.text,
-        history: currentConvo.messages.slice(0, -1),
-        language,
-        generateName: shouldGenerateName,
-      },
-      (token) => {
-        // append each incoming token
-        setConversations(prev =>
-          prev.map(c => {
-            if (c.id !== activeConversationId) return c;
-            const msgs = [...c.messages];
-            const last = msgs[msgs.length - 1];
-            msgs[msgs.length - 1] = { ...last, text: last.text + token };
-            return { ...c, messages: msgs };
-          })
-        );
-      }
-    );
+    const chatName = await sendMessageStream(payload, token => {
+      setConversations(prev =>
+        prev.map(c => {
+          if (c.id !== activeConversationId) return c;
+          const msgs = [...c.messages];
+          const last = msgs[msgs.length - 1];
+          msgs[msgs.length - 1] = { ...last, text: last.text + token };
+          return { ...c, messages: msgs };
+        })
+      );
+    });
 
     // 3) Finally, set the conversation title if one was generated
     setConversations(prev =>
