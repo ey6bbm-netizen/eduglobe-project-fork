@@ -75,13 +75,7 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  const {
-    text,
-    history = [],           // array of prior messages
-    language,
-    conversationName,
-    generateName
-  } = await req.json();
+  const {text, history = [], language, conversationName, generateName} = await req.json();
   
   import { Role } from "./constants.server.js";
 
