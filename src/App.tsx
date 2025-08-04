@@ -108,57 +108,47 @@ const App = () => {
   return finalChatName;
 }
 
-  const handleSendMessage = useCallback(async (text: string) => {
-  // … optimistic user push, loading state, etc …
+const handleSendMessage = useCallback(async (text: string) => {
+  if (!activeConversationId) return;
 
-
-  // Re-declare here so it's in scope for both optimistic update AND streaming call:
-  const userMessage: Message = {
-    id: Date.now().toString(),
-    role: Role.USER,
-    text,
-    language,
-  };
-  // Optimistic update (push out)
-  setConversations(prevConvos =>
-    prevConvos.map(c =>
+  // Create & push the user message once
+  const userMessage: Message = { id: Date.now().toString(), role: Role.USER, text, language };
+  setConversations(prev =>
+    prev.map(c =>
       c.id === activeConversationId
         ? { ...c, messages: [...c.messages, userMessage] }
         : c
     )
   );
-  // After pushing userMessage
-  const aiMessage: Message = {
-    id: (Date.now() + 1).toString(),
-    role: Role.AI,
-    text: "",
-    language,
-  };
-  // Optimistically add the empty AI message
-  setConversations(prevConvos =>
-    prevConvos.map(c =>
-      c.id === activeConversationId
-        ? { ...c, messages: [...c.messages, aiMessage] }
-        : c
-    )
-  );
+
   setIsLoading(true);
 
   try {
     const currentConvo = conversations.find(c => c.id === activeConversationId)!;
-    const shouldGenerateName =
-      currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
+    const shouldGenerateName = currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
 
-    // ─── INSERT HERE ───
-    // Start streaming and append tokens into the last AI message:
+    // Create & push the empty AI placeholder here
+    const aiMessage: Message = { id: (Date.now() + 1).toString(), role: Role.AI, text: '', language };
+    setConversations(prev =>
+      prev.map(c =>
+        c.id === activeConversationId
+          ? { ...c, messages: [...c.messages, aiMessage] }
+          : c
+      )
+    );
+
+    // Build payload for stream
+    const payload = {
+      text: userMessage.text,
+      history: currentConvo.messages.slice(0, -1),
+      language,
+      generateName: shouldGenerateName,
+    };
+
+    // Stream AI response into the last message
     const chatName = await sendMessageStream(
-      {
-        text: userMessage.text,
-        history: currentConvo.messages.slice(0, -1),
-        language,
-        generateName: shouldGenerateName,
-      },
-      (token: string) => {
+      payload,
+      token => {
         setConversations(prev =>
           prev.map(c => {
             if (c.id !== activeConversationId) return c;
@@ -170,23 +160,21 @@ const App = () => {
         );
       }
     );
-    // ─────────────────────
 
-    // After streaming completes, update chat title if provided
+    // Update chat title
     setConversations(prev =>
       prev.map(c =>
         c.id === activeConversationId ? { ...c, name: chatName || c.name } : c
       )
     );
-
-    } catch (err) {
-      console.error("Streaming error:", err);
-      // … error handling …
-    } finally {
-      setIsLoading(false);
-    }
-  },[activeConversationId, authenticatedUser, isPermanentlyBlocked, totalMessageCount, language, conversations, setConversations, setIsPermanentlyBlocked, setTotalMessageCount, uiStrings]);
-    
+  } 
+  catch (err) {
+    console.error('Streaming error:', err);
+    // error fallback
+  } finally {
+    setIsLoading(false);
+  }
+}, [activeConversationId, conversations, language, authenticatedUser, totalMessageCount, isPermanentlyBlocked, uiStrings, setConversations, setTotalMessageCount, setIsPermanentlyBlocked]);  
   const handleNewChat = () => {
     if (!authenticatedUser && conversations.length >= GUEST_CHAT_LIMIT) {
         return; // Guest limit reached
