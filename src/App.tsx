@@ -66,7 +66,10 @@ const App = () => {
     }
   }, [isPermanentlyBlocked, activeConversation, language, setConversations, activeConversationId, uiStrings.limitReachedMessage]);
 
-  async function sendMessageStream({ text, history, language, generateName }) {
+  async function sendMessageStream(
+    { text, history, language, generateName }: Payload,
+    onToken: (token: string) => void
+  ): Promise<string> { /* ... */ }
   const res = await fetch("/api/sendMessage", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -95,6 +98,11 @@ const App = () => {
 
     for (const part of parts) {
       // Final “done” event carries the chatName
+      if (part.startsWith("data:")) {
+        const chunk = JSON.parse(part.slice(6));
+        if (chunk.text) onToken(chunk.text);
+        continue;
+      }
       if (part.startsWith("event: done")) {
         const dataLine = part.split("\n").find(l => l.startsWith("data:"));
         if (dataLine) {
@@ -128,15 +136,8 @@ const handleSendMessage = useCallback(async (text: string) => {
     const shouldGenerateName = currentConvo.messages.filter(m => m.role === Role.USER).length === 1;
 
     // Create & push the empty AI placeholder here
-    const aiMessage: Message = { id: (Date.now() + 1).toString(), role: Role.AI, text: '', language };
-    setConversations(prev =>
-      prev.map(c =>
-        c.id === activeConversationId
-          ? { ...c, messages: [...c.messages, aiMessage] }
-          : c
-      )
-    );
-
+    const aiMessage: Message = { id: newId(), role: Role.AI, text: '', language };
+    setConversations(prev => prev.map(...));
     // Build payload for stream
     const payload = {
       text: userMessage.text,
