@@ -152,7 +152,7 @@ export default async function handler(req: Request): Promise<Response> {
   });
 }
 
-// Client-side consumption
+// Client-side consumption \\ dummy edit, can revert
 
 async function sendMessageSSE(payload) {
   const res = await fetch("/api/sendMessage", {
