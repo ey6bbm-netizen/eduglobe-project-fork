@@ -99,7 +99,6 @@ const App = () => {
         finalChatName = payload.chatName;
         continue;
       }
-      appendTokenToUI(chunk.text);
     }
   }
 
