@@ -96,13 +96,9 @@ const App = () => {
     for (const part of parts) {
       // Final “done” event carries the chatName
       if (part.startsWith("event: done")) {
-        const payload = JSON.parse(part.split("\n")[1].slice(6));
         finalChatName = payload.chatName;
         continue;
       }
-      if (!part.startsWith("data:")) continue;
-      const chunk = JSON.parse(part.slice(6));
-      // chunk.text is your next token
       appendTokenToUI(chunk.text);
     }
   }
