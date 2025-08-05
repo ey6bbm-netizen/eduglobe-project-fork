@@ -65,14 +65,15 @@ export default async function handler(req: Request): Promise<Response> {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         /* ── ► get async-iterable safely ◄ ── */
-        let raw: any = model.generateContentStream({
-          history: baseHistory,
-          text,
+        // ❶ call SDK → Promise
+        const result = await model.generateContentStream({
+          history: translatedHistory,
+          text: messages[messages.length - 1].text,
         });
-        if (typeof raw?.then === "function") raw = await raw; // unwrap Promise
-        const llmStream: AsyncIterable<any> = raw.stream ?? raw; // pick .stream or raw
-        /* ─────────────────────────────────── */
-
+        
+        // ❷ grab the real async-iterable
+        const llmStream: AsyncIterable<any> = result.stream;
+        
         for await (const chunk of llmStream) {
           let out = chunk.text ?? "";
           out = await translateText(out, language);
