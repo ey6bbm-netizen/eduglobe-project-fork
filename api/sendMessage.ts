@@ -83,32 +83,27 @@ export default async function handler(req: Request): Promise<Response> {
             history: translatedHistory,
             text: messages[messages.length - 1].text,
           });
-          const llmStream: any = result.stream;
-          console.log("result", result);
-          console.log("llmStream", llmStream);
+          const llmStream = result.stream;
+          
+          console.log("model.generateContentStream result:", result);
+          console.log("llmStream:", llmStream);
           
           if (!llmStream || typeof llmStream[Symbol.asyncIterator] !== "function") {
             throw new Error("llmStream is not iterable");
           }
-          for await (const chunk of llmStream) {
-            let out = chunk.text ?? "";
-            out = await translateText(out, language);
+          
+          try {
+            for await (const chunk of llmStream) {
+              //...
+            }
+          } catch (err) {
+            console.error("Error in for-await loop", err);
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ text: out })}\n\n`)
+              encoder.encode(`data: ${JSON.stringify({ error: err.message || String(err) })}\n\n`)
             );
+            controller.close();
+            return;
           }
-  
-          /* final done frame (no optional title here) */
-          controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
-          controller.close();
-        } catch (err: any) {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ error: err.message })}\n\n`)
-          );
-          controller.close();
-        }
-      },
-    });
 
   return new Response(stream, {
     headers: {
