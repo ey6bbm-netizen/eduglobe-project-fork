@@ -1,5 +1,5 @@
 import './index.css';
-// DUMMY EDIT
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Language, Message, Role, Conversation } from './types';
 import { FREE_MESSAGE_LIMIT, UI_TEXT, GUEST_CHAT_LIMIT } from './constants';
