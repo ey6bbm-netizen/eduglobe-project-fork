@@ -110,38 +110,30 @@ export default async function handler(req: Request): Promise<Response> {
   // 3️⃣ Prepare streaming headers
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        // Kick off the streaming LLM call
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const llmStream = await model.generateContentStream({
-          history: translatedHistory,
-          text: messages[messages.length - 1].text,
-        });
-
-        // As each chunk arrives, optionally translate it back
-        for await (const chunk of llmStream) {
-          let text = chunk.text ?? "";
-          // If you want to translate each fragment into the user's language:
-          text = await translateText(text, language);
-
-          const payload = { ...chunk, text, chatName: null };
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      async start(controller) {
+        try {
+          const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+          const llmStream = await model.generateContentStream({
+            history: translatedHistory,
+            text: messages[messages.length - 1].text,
+          });
+  
+          // ← This loop must be inside the same block ↓
+          for await (const chunk of llmStream) {
+            let text = chunk.text ?? "";
+            text = await translateText(text, language);
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
+          }
+  
+          // Final “done” event still inside start()
+          controller.enqueue(encoder.encode(`event: done\ndata: ${JSON.stringify({ chatName })}\n\n`));
+          controller.close();
+        } catch (err: any) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: err.message })}\n\n`));
+          controller.close();
         }
-
-        // When done, send a final “done” event that includes the chatName
-        controller.enqueue(encoder.encode(
-          `event: done\ndata: ${JSON.stringify({ chatName })}\n\n`
-        ));
-        controller.close();
-      } catch (err: any) {
-        controller.enqueue(encoder.encode(
-          `data: ${JSON.stringify({ error: err.message })}\n\n`
-        ));
-        controller.close();
       }
-    }
-  });
+    });
 
   return new Response(stream, {
     headers: {
