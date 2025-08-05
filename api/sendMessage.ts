@@ -59,23 +59,33 @@ export default async function handler(req: Request): Promise<Response> {
   /* Prepare SSE stream */
   const encoder = new TextEncoder();
 
+  const { text, history = [], language } = await req.json();
+
+  /* ① rebuild translatedHistory */
+  const translatedHistory = [
+    { role: "system", parts: [{ text: SYSTEM_PROMPTS[language] }] },
+    ...history.map(m => ({
+      role: m.role === Role.USER ? "user" : "model",
+      parts: [{ text: m.text }],
+    })),
+    // push the new user message last
+    { role: "user", parts: [{ text }] },
+  ];
+  
+  /* ② now build the ReadableStream that references it */
   const stream = new ReadableStream({
     async start(controller) {
-      try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-        /* ── ► get async-iterable safely ◄ ── */
-        // ❶ call SDK → Promise
-        const result = await model.generateContentStream({
-          history: translatedHistory,
-          text: messages[messages.length - 1].text,
-        });
-        
-        // ❷ grab the real async-iterable
-        const llmStream: AsyncIterable<any> = result.stream;
-        
-        for await (const chunk of llmStream) {
-          let out = chunk.text ?? "";
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  
+      let raw: any = model.generateContentStream({
+        history: translatedHistory,      // now defined
+        text,                            // (or omit if history is enough)
+      });
+      if (typeof raw?.then === "function") raw = await raw;
+      const llmStream: AsyncIterable<any> = raw.stream ?? raw;
+  
+      for await (const chunk of llmStream) {
+        let out = chunk.text ?? "";
           out = await translateText(out, language);
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ text: out })}\n\n`)
