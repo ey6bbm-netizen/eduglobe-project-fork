@@ -58,9 +58,6 @@ export default async function handler(req: Request): Promise<Response> {
 
   /* Prepare SSE stream */
   const encoder = new TextEncoder();
-
-  const { text, history = [], language } = await req.json();
-
   /* ① rebuild translatedHistory */
   const translatedHistory = [
     { role: "system", parts: [{ text: SYSTEM_PROMPTS[language] }] },
