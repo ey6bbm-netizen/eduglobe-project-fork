@@ -83,7 +83,7 @@ export default async function handler(req: Request): Promise<Response> {
             history: translatedHistory,
             text: messages[messages.length - 1].text,
           });
-          **const llmStream: AsyncIterable<any> = result.stream;    // <── JUST THIS LINE**
+          const llmStream: AsyncIterable<any> = result.stream;    // <── JUST THIS LINE**
 
           for await (const chunk of llmStream) {
             let out = chunk.text ?? "";
