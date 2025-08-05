@@ -83,8 +83,13 @@ export default async function handler(req: Request): Promise<Response> {
             history: translatedHistory,
             text: messages[messages.length - 1].text,
           });
-          const llmStream: AsyncIterable<any> = result.stream;    // <── JUST THIS LINE**
-
+          const llmStream: any = result.stream;
+          console.log("result", result);
+          console.log("llmStream", llmStream);
+          
+          if (!llmStream || typeof llmStream[Symbol.asyncIterator] !== "function") {
+            throw new Error("llmStream is not iterable");
+          }
           for await (const chunk of llmStream) {
             let out = chunk.text ?? "";
             out = await translateText(out, language);
