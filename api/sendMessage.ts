@@ -63,6 +63,7 @@ const generateChatName = async (
     const prompt = `Summarize this user query into a short, 3-5 word chat title. Reply in "${lang}": "${firstMessage}"`;
 
     const result = await model.generateContent(prompt);
+    console.log("💡 generateContentStream returned:", result);
     const text = await result.response.text();
     return text.replace(/["'.]/g, "");
   } catch (err) {
@@ -117,7 +118,7 @@ export default async function handler(req: Request): Promise<Response> {
             history: translatedHistory,
             text: messages[messages.length - 1].text,
           });
-          console.log("💡 generateContentStream returned:", result);
+          
           // ← This loop must be inside the same block ↓
           for await (const chunk of llmStream) {
             let text = chunk.text ?? "";
