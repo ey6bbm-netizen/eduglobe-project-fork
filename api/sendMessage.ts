@@ -113,13 +113,13 @@ export default async function handler(req: Request): Promise<Response> {
       async start(controller) {
         try {
           const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-          let raw = model.generateContentStream({
+          const raw = model.generateContentStream({
             history: translatedHistory,
             text: messages[messages.length - 1].text,
           });
-          if (typeof (raw as any).then === 'function') raw = await raw; // if a Promise
-          const llmStream: AsyncIterable<any> =
-            (raw as any).stream ?? (raw as any);              // fall back to raw
+          const llmStream = (raw as any).stream ?? raw;   // <-- no await
+
+
           console.log('🔍 llmStream type:', typeof llmStream, llmStream);
           // ← This loop must be inside the same block ↓
           for await (const chunk of llmStream) {
