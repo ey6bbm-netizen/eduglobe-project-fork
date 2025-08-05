@@ -1,115 +1,156 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { SYSTEM_PROMPTS, Language, Role } from "./constants.server.js";
 
-export const config = { runtime: "edge" };
-
+// Gemini setup
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-/* ───────── helpers ───────── */
-const getLanguageCode = (lang: string) =>
-  ({ en: "en", bo: "bo", haw: "haw", te: "te" } as const)[lang as any] ?? "en";
+// Language mapping
+const getLanguageCode = (lang: string): string => {
+  const codes: Record<string, string> = {
+    [Language.ENGLISH]: "en",
+    [Language.TIBETAN]: "bo",
+    [Language.HAWAIIAN]: "haw",
+    [Language.TELUGU]: "te",
+  };
+  return codes[lang as keyof typeof codes] || "en";
+};
 
-const translateText = async (text: string, targetLang: string) => {
+// Translate text to target language using REST
+const translateText = async (
+  text: string,
+  targetLang: string
+): Promise<string> => {
   const target = getLanguageCode(targetLang);
   if (target === "en") return text;
-  const url =
-    "https://translation.googleapis.com/language/translate/v2?key=" +
-    process.env.GEMINI_API_KEY;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ q: text, target, format: "text" }),
-  });
-  if (!resp.ok) return text;
-  const j = await resp.json();
-  return j?.data?.translations?.[0]?.translatedText ?? text;
+
+  const url = `https://translation.googleapis.com/language/translate/v2?key=${process.env.GEMINI_API_KEY}`;
+  console.log("📡 Calling Translate API with target:", target);
+
+  try {
+    console.log("→ Translating:", text, "to", target);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ q: text, target, format: "text" }),
+    });
+    
+    if (!res.ok) {
+  const errText = await res.text();
+  console.error("Translation API error:", res.status, errText);
+  return text;
+}
+
+    const json = await res.json();
+    console.log("✅ Translate API response:", JSON.stringify(json));
+
+    return json?.data?.translations?.[0]?.translatedText || text;
+  } catch (err) {
+    console.error("❌ Translation error:", err);
+    return text;
+  }
 };
-/* ─────────────────────────── */
 
+// Generate short conversation title
+const generateChatName = async (
+  firstMessage: string,
+  lang: string
+): Promise<string> => {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `Summarize this user query into a short, 3-5 word chat title. Reply in "${lang}": "${firstMessage}"`;
+
+    const result = await model.generateContent(prompt);
+    const text = await result.response.text();
+    return text.replace(/["'.]/g, "");
+  } catch (err) {
+    console.error("⚠️ Error generating chat name:", err);
+    return firstMessage.slice(0, 30) + "...";
+  }
+};
+
+// Route handler
 export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== "POST")
-    return new Response("Method Not Allowed", { status: 405 });
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
+      status: 405,
+    });
+  }
 
-  const { text, history = [], language, conversationName, generateName } =
-    await req.json();
+  if (!process.env.GEMINI_API_KEY) {
+    return new Response(
+      JSON.stringify({ error: "GEMINI_API_KEY is not configured" }),
+      { status: 500 }
+    );
+  }
 
-  // 👇 ADD THIS 👇
-  const messages = [...history, { role: Role.USER, text, language }];
+  try {
+    const body: {
+      messages: { role: string; text: string; language: string }[];
+      language: string;
+      conversationName?: string;
+    } = await req.json();
 
-  /* Build translated history */
-  const baseHistory = [
-    {
-      role: "system",
-      parts: [{ text: SYSTEM_PROMPTS[language as keyof typeof SYSTEM_PROMPTS] }],
-    },
-    ...(
-      await Promise.all(
-        [...history, { role: Role.USER, text, language }].map(async (m) => ({
-          role: m.role === Role.USER ? "user" : "model",
-          parts: [
-            {
-              text:
-                m.role === Role.USER
-                  ? await translateText(m.text, Language.ENGLISH)
-                  : m.text,
-            },
-          ],
-        }))
-      )
-    ),
-  ];
+    const { messages, language, conversationName } = body;
+    console.log("📥 Incoming request with messages:", messages);
 
-  /* Prepare SSE stream */
-  const encoder = new TextEncoder();
-  /* ① rebuild translatedHistory */
-  const translatedHistory = [
-    { role: "system", parts: [{ text: SYSTEM_PROMPTS[language] }] },
-    ...history.map(m => ({
-      role: m.role === Role.USER ? "user" : "model",
-      parts: [{ text: m.text }],
-    })),
-    // push the new user message last
-    { role: "user", parts: [{ text }] },
-  ];
-  
-  /* ② now build the ReadableStream that references it */
-   const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  
-         /* get the streaming iterable safely */
-          const result = await model.generateContentStream({
-            history: translatedHistory,
-            text: messages[messages.length - 1].text,
-          });
-          const llmStream = result.stream;
-          
-          console.log("model.generateContentStream result:", result);
-          console.log("llmStream:", llmStream);
-          
-          if (!llmStream || typeof llmStream[Symbol.asyncIterator] !== "function") {
-            throw new Error("llmStream is not iterable");
-          }
-          
-          try {
-            for await (const chunk of llmStream) {
-              //...
-            }
-          } catch (err) {
-            console.error("Error in for-await loop", err);
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ error: err.message || String(err) })}\n\n`)
-            );
-            controller.close();
-            return;
-          }
+    const userMessages = messages.filter(
+      (m: { role: string }) => m.role === Role.USER
+    );
+    const lastUserMessage = userMessages[userMessages.length - 1]?.text ?? "";
+    console.log("🧠 Last user message:", lastUserMessage);
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    },
-  });
+    const translatedMessages = [
+      {
+        role: "system",
+        parts: [{ text: SYSTEM_PROMPTS[language as keyof typeof SYSTEM_PROMPTS] }],
+      },
+      ...(await Promise.all(
+        messages.map(async (msg: { role: string; text: string }) => {
+          const translatedText = msg.role === Role.USER
+            ? await translateText(msg.text, Language.ENGLISH)
+            : msg.text;
+          return {
+            role: msg.role === Role.USER ? "user" : "model",
+            parts: [{ text: translatedText }],
+          };
+        })
+      )),
+    ];
+
+    console.log("📜 Translated message history:", translatedMessages);
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const chat = model.startChat({ history: translatedMessages });
+
+    const result = await chat.sendMessage([{ text: lastUserMessage }]);
+    const englishResponse = await result.response.text();
+    const translatedResponse = await translateText(englishResponse, language);
+
+    const aiMessage = {
+      id: Date.now().toString(),
+      role: Role.AI,
+      text: translatedResponse,
+      language,
+    };
+
+    let title = conversationName;
+    if (!conversationName && userMessages.length === 1) {
+      title = await generateChatName(lastUserMessage, language);
+    }
+
+    console.log("✅ Final AI message:", aiMessage);
+
+    return new Response(
+      JSON.stringify({ message: aiMessage, conversationName: title }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  } catch (err) {
+    console.error("🔥 Internal server error:", err);
+    return new Response(JSON.stringify({ error: "Internal Server Error" }), {
+      status: 500,
+    });
+  }
 }
