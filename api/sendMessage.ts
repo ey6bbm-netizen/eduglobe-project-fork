@@ -1,8 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { SYSTEM_PROMPTS, Language, Role } from "./constants.server.js";
-import { Role } from "./constants.server.js";
-
-export const config = { runtime: "edge" };
 
 // Gemini setup
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -77,14 +74,7 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  const {text, history = [], language, conversationName, generateName} = await req.json();
-  
-  const messages = [
-    ...history,
-    { role: Role.USER, text, language }
-  ];
-
-
+  const { messages, language, conversationName, generateName } = await req.json();
   // 1️⃣ Pre-translate history
   const translatedHistory = [
     {
@@ -152,7 +142,7 @@ export default async function handler(req: Request): Promise<Response> {
   });
 }
 
-// Client-side consumption \\ dummy edit, can revert
+// Client-side consumption
 
 async function sendMessageSSE(payload) {
   const res = await fetch("/api/sendMessage", {
