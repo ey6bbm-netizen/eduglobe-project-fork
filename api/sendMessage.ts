@@ -33,6 +33,9 @@ export default async function handler(req: Request): Promise<Response> {
   const { text, history = [], language, conversationName, generateName } =
     await req.json();
 
+  // 👇 ADD THIS 👇
+  const messages = [...history, { role: Role.USER, text, language }];
+
   /* Build translated history */
   const baseHistory = [
     {
