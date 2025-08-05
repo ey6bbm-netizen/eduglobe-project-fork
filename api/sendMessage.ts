@@ -64,18 +64,6 @@ export default async function handler(req: Request): Promise<Response> {
       try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        const { text, history = [], language } = await req.json();
-
-        /* ① rebuild translatedHistory */
-        const translatedHistory = [
-          { role: "system", parts: [{ text: SYSTEM_PROMPTS[language] }] },
-          ...history.map(m => ({
-            role: m.role === Role.USER ? "user" : "model",
-            parts: [{ text: m.text }],
-          })),
-          // push the new user message last
-          { role: "user", parts: [{ text }] },
-        ];
         /* ── ► get async-iterable safely ◄ ── */
         // ❶ call SDK → Promise
         const result = await model.generateContentStream({
