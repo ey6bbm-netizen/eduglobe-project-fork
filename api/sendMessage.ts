@@ -113,11 +113,12 @@ export default async function handler(req: Request): Promise<Response> {
       async start(controller) {
         try {
           const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-          const { stream: llmStream } = await model.generateContentStream({
+          const result = await model.generateContentStream({
             history: translatedHistory,
             text: messages[messages.length - 1].text,
           });
-          
+          const llmStream = 'stream' in result ? result.stream : result; // ← key line
+          console.log('🔍 llmStream type:', typeof llmStream, llmStream);
           // ← This loop must be inside the same block ↓
           for await (const chunk of llmStream) {
             let text = chunk.text ?? "";
