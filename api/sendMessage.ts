@@ -113,15 +113,19 @@ export default async function handler(req: Request): Promise<Response> {
       async start(controller) {
         try {
           const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-          // 1️⃣ get the raw result (may be a Promise OR the iterable itself)
+          // 1️⃣ call the SDK (may give back a Promise OR an iterable)
           let raw: any = model.generateContentStream({
             history: translatedHistory,
             text: messages[messages.length - 1].text,
           });
-          if (typeof raw.then === "function") raw = await raw;   // unwrap if Promise
-          // 2️⃣ whichever build you’re running, this is now the async-iterable
-          const llmStream: AsyncIterable<any> = raw.stream ?? raw;
-          // 3️⃣ iterate it
+          
+          // 2️⃣ unwrap if it's a Promise
+          if (typeof raw?.then === "function") raw = await raw;
+          
+          // 3️⃣ pick .stream when present, else use raw
+          const llmStream: AsyncIterable<any> = (raw as any).stream ?? raw;
+          
+          // 4️⃣ now llmStream is ALWAYS async-iterable
           for await (const chunk of llmStream) {
             let text = chunk.text ?? "";
             text = await translateText(text, language);
