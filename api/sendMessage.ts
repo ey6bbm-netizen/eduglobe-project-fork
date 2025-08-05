@@ -73,36 +73,40 @@ export default async function handler(req: Request): Promise<Response> {
   ];
   
   /* ② now build the ReadableStream that references it */
-  const stream = new ReadableStream({
-    async start(controller) {
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+   const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
   
-      let raw: any = model.generateContentStream({
-        history: translatedHistory,      // now defined
-        text,                            // (or omit if history is enough)
-      });
-      if (typeof raw?.then === "function") raw = await raw;
-      const llmStream: AsyncIterable<any> = raw.stream ?? raw;
+          /* ── ► get async-iterable safely ◄ ── */
+          // ❶ call SDK → Promise
+          const result = await model.generateContentStream({
+            history: translatedHistory,
+            text: messages[messages.length - 1].text,
+          });
+          
+          // ❷ grab the real async-iterable
+          const llmStream: AsyncIterable<any> = result.stream;
+          
+          for await (const chunk of llmStream) {
+            let out = chunk.text ?? "";
+            out = await translateText(out, language);
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ text: out })}\n\n`)
+            );
+          }
   
-      for await (const chunk of llmStream) {
-        let out = chunk.text ?? "";
-          out = await translateText(out, language);
+          /* final done frame (no optional title here) */
+          controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
+          controller.close();
+        } catch (err: any) {
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ text: out })}\n\n`)
+            encoder.encode(`data: ${JSON.stringify({ error: err.message })}\n\n`)
           );
+          controller.close();
         }
-
-        /* final done frame (no optional title here) */
-        controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
-        controller.close();
-      } catch (err: any) {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ error: err.message })}\n\n`)
-        );
-        controller.close();
-      }
-    },
-  });
+      },
+    });
 
   return new Response(stream, {
     headers: {
