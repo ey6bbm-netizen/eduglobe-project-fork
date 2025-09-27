@@ -56,7 +56,7 @@ const generateChatName = async (
   lang: string
 ): Promise<string> => {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `Summarize this user query into a short, 3-5 word chat title. Reply in "${lang}": "${firstMessage}"`;
 
     const result = await model.generateContent(prompt);
@@ -137,7 +137,7 @@ export default async function handler(req: any, res: any) {
     );
     console.log("📜 Translated message history:", translatedMessages);
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const chat = model.startChat({ history: translatedMessages });
 
     const result = await chat.sendMessage([{ text: lastUserMessage }]);
